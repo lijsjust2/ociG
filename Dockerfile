@@ -43,9 +43,5 @@ ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseS
 # 暴露端口
 EXPOSE 9856
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:9856/actuator/health || exit 1
-
 # 启动应用
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
