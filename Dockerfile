@@ -5,12 +5,16 @@ FROM maven:3.8.6-openjdk-8-slim AS builder
 
 WORKDIR /app
 
-# 复制 pom.xml 并下载依赖（利用 Docker 缓存）
+# 复制根目录 pom.xml
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
 
-# 复制源代码
-COPY src ./src
+# 复制 oci-common 模块
+COPY oci-common/pom.xml ./oci-common/
+COPY oci-common/src ./oci-common/src
+
+# 复制 oci-server 模块
+COPY oci-server/pom.xml ./oci-server/
+COPY oci-server/src ./oci-server/src
 
 # 构建 JAR 文件（跳过测试）
 RUN mvn clean package -DskipTests -B
