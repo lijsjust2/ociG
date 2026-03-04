@@ -32,7 +32,7 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 
 # 从构建阶段复制 JAR 文件
-COPY --from=builder /app/oci-server/target/oci-server.jar ./app.jar
+    COPY --from=builder /app/oci-server/target/oci-start-release.jar ./app.jar
 
 # 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/keys
