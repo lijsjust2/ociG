@@ -16,7 +16,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests -B
 
 # Stage 2: 运行时镜像（针对 x86 架构优化）
-FROM openjdk:8-jre-alpine
+FROM eclipse-temurin:8-jre-alpine
 
 # 安装必要的工具
 RUN apk add --no-cache tzdata curl
