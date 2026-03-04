@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  oci-start:
+    container_name: oci-start
+    image: oci-start:amd64
+    restart: unless-stopped
+    
+    # 端口映射
+    ports:
+      - "9856:9856"
+    
+    # 数据卷映射
+    volumes:
+      # 配置文件和数据目录
+      - ./data:/app/data
+      # 日志目录
+      - ./logs:/app/logs
+      # OCI 密钥文件目录
+      - ./keys:/app/keys
+    
+    # 环境变量（可选，覆盖默认 JVM 参数）
+    environment:
+      # JVM 参数（针对低配机器优化）
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication -XX:+OptimizeStringConcat -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:NewRatio=1 -XX:SurvivorRatio=8 -XX:+DisableExplicitGC
+      # 时区设置
+      - TZ=Asia/Shanghai
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9856/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 资源限制（可选，根据 NAS 配置调整）
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M

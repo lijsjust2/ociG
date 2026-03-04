@@ -1,0 +1,176 @@
+name: Build Docker Image (AMD64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: '构建版本（latest 或指定版本号）'
+        required: false
+        default: 'latest'
+        type: string
+      create_release:
+        description: '是否创建 GitHub Release（用于发布正式版本）'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-flags: --allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (AMD64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          platforms: linux/amd64
+          tags: oci-start:amd64
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          outputs: type=docker,dest=/tmp/oci-start-amd64.tar
+
+      - name: Update cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Verify built image
+        run: |
+          echo "=== Verifying AMD64 image ==="
+          ls -lh /tmp/oci-start-amd64.tar
+          file /tmp/oci-start-amd64.tar
+          
+          echo -e "\n=== Checking tar file contents ==="
+          tar -tvf /tmp/oci-start-amd64.tar | head -5
+
+      - name: Get version and timestamp
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.build_version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="latest"
+          fi
+          
+          # 获取当前时间（北京时间 UTC+8）
+          TIMESTAMP=$(date -u +%Y%m%d%H%M)
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+      - name: Rename file with version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # 重命名 AMD64 镜像
+          mv /tmp/oci-start-amd64.tar "/tmp/oci-start-amd64-${VERSION}.tar"
+          
+          echo "Renamed file:"
+          ls -lh /tmp/oci-start-amd64-*.tar
+
+      - name: Create Release
+        if: github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.build_version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "OCI-Start Docker Image ${{ steps.version.outputs.version }}"
+          body: |
+            ## OCI-Start Docker 镜像 (AMD64)
+            
+            ### 镜像信息
+            - **版本**: ${{ steps.version.outputs.version }}
+            - **构建时间**: ${{ steps.version.outputs.timestamp }}
+            - **架构**: AMD64 (x86_64)
+            
+            ### 使用方法
+            
+            #### 加载并运行镜像
+            ```bash
+            # 加载镜像
+            docker load -i oci-start-amd64-${{ steps.version.outputs.version }}.tar
+            
+            # 运行容器
+            docker run -d \
+              --name oci-start \
+              -p 9856:9856 \
+              -v $(pwd)/data:/app/data \
+              -v $(pwd)/logs:/app/logs \
+              -v $(pwd)/keys:/app/keys \
+              oci-start:amd64
+            ```
+            
+            #### 使用 docker-compose
+            ```bash
+            # 复制 docker-compose.yml 到工作目录
+            cp docker-compose.yml /path/to/oci-start/
+            
+            # 启动容器
+            cd /path/to/oci-start
+            docker-compose up -d
+            ```
+            
+            ### 配置说明
+            
+            首次运行前，需要配置 OCI 账户信息：
+            
+            1. 停止容器: `docker stop oci-start`
+            2. 编辑配置文件: `vim data/oci-start.properties`
+            3. 上传密钥文件到 `keys/` 目录
+            4. 重启容器: `docker start oci-start`
+            
+            ### 优化说明
+            
+            本镜像已针对低配机器（4GB RAM）进行优化：
+            - JVM 堆内存: 512MB
+            - 垃圾回收器: G1 GC
+            - 线程数: 2 个
+            - 预期内存占用: 300-500MB
+            
+            ### 访问地址
+            
+            Web 界面: http://your-ip:9856
+            
+            ---
+            
+            **注意**: 请确保正确配置 OCI 账户信息和密钥文件。
+          draft: false
+          prerelease: false
+          files: |
+            /tmp/oci-start-amd64-${{ steps.version.outputs.version }}.tar
+
+      - name: Upload artifact
+        if: github.event.inputs.create_release == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-amd64-${{ steps.version.outputs.version }}
+          path: |
+            /tmp/oci-start-amd64-${{ steps.version.outputs.version }}.tar
+          retention-days: 7
